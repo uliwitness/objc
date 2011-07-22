@@ -1,135 +1,213 @@
 
 /*
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
+ * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
  *  main.c
  *  objc XFcn
  *
  *  Created by Uli Kusterer on 2011-07-22.
  *  Copyright Uli Kusterer 2011. All rights reserved.
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
+ * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
  */
 
 
 /*
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
+ * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
  *	Includes
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
+ * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
  */
 
-#include "SuperXCmd.h"
+#import "SCParamBlock.h"
+
+
+SCParamBlock*		sParamBlock = NULL;
+
+
+int	main( XCmdPtr inParamBlock );
 
 
 /*
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
- *	Defines
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
- */
-
-#define kMinNumParams	0				// Fill in the minimum number of parameters here
-#define kMaxNumParams	0				// Fill in the maximum number of parameters here
-#define kVersionNumber	"1.0"			// Fill in the current version number here
-#define kSyntaxMsg		"objc(<Fill in your parameter list here>)"
-#define kCopyrightMsg	"objc XFcn by Uli Kusterer \251 2011 Uli Kusterer"
-
-
-/*
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
- *	Prototypes
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
- */
-
-int					main				(XCmdPtr);
-void				Fail				(char *);
-Boolean				FalseAlarm			(void);
-void				SetResult			(char *);
-void				doMyFunction		(void);
-
-
-/*
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
- *	Static and Global Variables
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
- */
-
-static XCmdPtr		par;				// Public pointer to parameter block
-static Boolean		fatalError;			// Had any fatal errors yet?
-
-
-/*
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
+ * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
  *	Script Entry Point
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
+ * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
  */
 
-int main(XCmdPtr xcmdPtr)
+int	main( XCmdPtr inParamBlock )
 {
-	par = xcmdPtr;
-	fatalError = false;
-	par->returnValue = 0;
-    
-	if (!FalseAlarm()) 					// Deal with kSyntaxMsg, author, & bad paramCounts
-		doMyFunction();		
+	sParamBlock = [[SCParamBlock alloc] initWithXCmdBlock: inParamBlock];
 	
-	return(0);
+	NSInvocation	*	theInvocation = nil;
+	NSMethodSignature*	theSignature = nil;
+	
+	// Load requested frameworks:
+	NSString*	theFrameworks = [sParamBlock parameterAtIndex: 0];
+	NSArray*	frameworksArray = [theFrameworks componentsSeparatedByString: @"\r"];
+	for( NSString* theFramework in frameworksArray )
+	{
+		if( [theFramework rangeOfString: @"/"].location == NSNotFound )
+		{
+			theFramework = [NSString stringWithFormat: @"/System/Library/Frameworks/%1$@.framework", theFramework];
+		}
+		
+		NSBundle	*	frameworkBundle = [NSBundle bundleWithPath: theFramework];
+		if( frameworkBundle && ![frameworkBundle isLoaded] )
+			[frameworkBundle load];
+	}
+	
+	// Find class or object to call:
+	NSString*	theObjectStr = [sParamBlock parameterAtIndex: 1];
+	id			theObject = nil;
+	
+	if( [[theObjectStr stringByTrimmingCharactersInSet: [NSCharacterSet decimalDigitCharacterSet]] length] == 0 )	// Raw pointer.
+		theObject = (id) [theObjectStr integerValue];
+	else
+		theObject = NSClassFromString( theObjectStr );
+	
+	// No parameters? Call directly:
+	NSString	*	methodName = [sParamBlock parameterAtIndex: 2];
+	if( [methodName characterAtIndex: [methodName length] -1] != ':' )
+	{
+		SEL theSelector = NSSelectorFromString(methodName);
+		theSignature = [theObject methodSignatureForSelector: theSelector];
+		theInvocation = [NSInvocation invocationWithMethodSignature: theSignature];
+		[theInvocation setTarget: theObject];
+		[theInvocation setSelector: theSelector];
+	}
+	else	// Parameters? Build selector name and add parameters:
+	{
+		// Every second  parameter is a label:
+		NSMutableString*	selectorString = [[methodName mutableCopy] autorelease];
+		NSInteger			numParams = [sParamBlock parameterCount];
+		for( int x = 4; x < numParams; x += 2 )
+		{
+			[selectorString appendString: [sParamBlock parameterAtIndex: x]];
+		}
+		
+		// Build invocation:
+		SEL theSelector = NSSelectorFromString(selectorString);
+		theSignature = [theObject methodSignatureForSelector: theSelector];
+		theInvocation = [NSInvocation invocationWithMethodSignature: theSignature];
+		[theInvocation setTarget: theObject];
+		[theInvocation setSelector: theSelector];
+		
+		// Add parameters to invocation, which are the params following the selector bits:
+		for( int x = 3; x < numParams; x += 2 )
+		{
+			NSString	*	theParam = [sParamBlock parameterAtIndex: x +2];	//
+			const char*	theType = [theSignature getArgumentTypeAtIndex: x];
+			if( strcmp( theType, @encode(id) ) == 0 )
+			{
+				id	paramObj = (id) [theParam integerValue];
+				[theInvocation setArgument: &paramObj atIndex: x +2];
+			}
+			else if( strcmp( theType, @encode(BOOL) ) == 0 )
+			{
+				int	paramInt = ([theParam caseInsensitiveCompare: @"true"] == NSOrderedSame) || ([theParam caseInsensitiveCompare: @"YES"] == NSOrderedSame);
+				[theInvocation setArgument: &paramInt atIndex: x +2];
+			}
+			else if( strcmp( theType, @encode(int) ) == 0 )
+			{
+				int	paramInt = [theParam intValue];
+				[theInvocation setArgument: &paramInt atIndex: x +2];
+			}
+			else if( strcmp( theType, @encode(long long) ) == 0 )
+			{
+				long long	paramLongLong = [theParam longLongValue];
+				[theInvocation setArgument: &paramLongLong atIndex: x +2];
+			}
+			else if( strcmp( theType, @encode(unichar) ) == 0 )
+			{
+				unichar	paramUniChar = [theParam characterAtIndex:0];
+				[theInvocation setArgument: &paramUniChar atIndex: x +2];
+			}
+			else if( strcmp( theType, @encode(char) ) == 0 )
+			{
+				char	paramChar = [theParam UTF8String][0];
+				[theInvocation setArgument: &paramChar atIndex: x +2];
+			}
+			else if( strcmp( theType, @encode(NSPoint) ) == 0 )
+			{
+				NSArray*	parts = [theParam componentsSeparatedByString: @","];
+				NSPoint	paramPoint = NSMakePoint([[parts objectAtIndex: 0] doubleValue], [[parts objectAtIndex: 1] doubleValue]);
+				[theInvocation setArgument: &paramPoint atIndex: x +2];
+			}
+			else if( strcmp( theType, @encode(NSRect) ) == 0 )
+			{
+				NSArray*	parts = [theParam componentsSeparatedByString: @","];
+				NSRect		paramRect = NSMakeRect([[parts objectAtIndex: 0] doubleValue], [[parts objectAtIndex: 1] doubleValue], [[parts objectAtIndex: 2] doubleValue], [[parts objectAtIndex: 3] doubleValue]);
+				[theInvocation setArgument: &paramRect atIndex: x +2];
+			}
+		}
+	}
+	
+	// Now set up a place for the return value, call the method and return the value to SC:
+	const char*	returnType = [theSignature methodReturnType];
+	if( strcmp( returnType, @encode(id) ) == 0 )
+	{
+		id	paramObj = nil;
+		[theInvocation invoke];
+		[theInvocation getReturnValue: &paramObj];
+		
+		[sParamBlock setReturnValue: [NSString stringWithFormat: @"%lld", (long long)paramObj]];
+	}
+	else if( strcmp( returnType, @encode(BOOL) ) == 0 )
+	{
+		BOOL	paramBool = NO;
+		[theInvocation invoke];
+		[theInvocation getReturnValue: &paramBool];
+		
+		[sParamBlock setReturnValue: (paramBool ? @"true" : @"false")];
+	}
+	else if( strcmp( returnType, @encode(int) ) == 0 )
+	{
+		int		paramInt = -1;
+		[theInvocation invoke];
+		[theInvocation getReturnValue: &paramInt];
+		
+		[sParamBlock setReturnValue: [NSString stringWithFormat: @"%d", paramInt]];
+	}
+	else if( strcmp( returnType, @encode(long long) ) == 0 )
+	{
+		long long paramLongLong = -1;
+		[theInvocation invoke];
+		[theInvocation getReturnValue: &paramLongLong];
+		
+		[sParamBlock setReturnValue: [NSString stringWithFormat: @"%lld", paramLongLong]];
+	}
+	else if( strcmp( returnType, @encode(unichar) ) == 0 )
+	{
+		unichar		paramUniChar = 0;
+		[theInvocation invoke];
+		[theInvocation getReturnValue: &paramUniChar];
+		
+		[sParamBlock setReturnValue: [[[NSString alloc] initWithCharacters: &paramUniChar length: 1] autorelease]];
+	}
+	else if( strcmp( returnType, @encode(char) ) == 0 )
+	{
+		char		paramChar = 0;
+		[theInvocation invoke];
+		[theInvocation getReturnValue: &paramChar];
+		
+		[sParamBlock setReturnValue: [[[NSString alloc] initWithBytes: &paramChar length: 1 encoding: NSUTF8StringEncoding] autorelease]];
+	}
+	else if( strcmp( returnType, @encode(NSPoint) ) == 0 )
+	{
+		NSPoint		paramPoint = { 0, 0 };
+		[theInvocation invoke];
+		[theInvocation getReturnValue: &paramPoint];
+		
+		[sParamBlock setReturnValue: [NSString stringWithFormat:@"%f,%f", paramPoint.x, paramPoint.y]];
+	}
+	else if( strcmp( returnType, @encode(NSRect) ) == 0 )
+	{
+		NSRect		paramRect = { { 0, 0 }, { 0, 0 } };
+		[theInvocation invoke];
+		[theInvocation getReturnValue: &paramRect];
+		
+		[sParamBlock setReturnValue: [NSString stringWithFormat:@"%f,%f,%f,%f", paramRect.origin.x, paramRect.origin.y, paramRect.size.width, paramRect.size.height]];
+	}
+	
+	[sParamBlock release];
+	
+	return 0;
 }	
 
-
-/*
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
- *	Put Your Code Here
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
- */
-
-void doMyFunction(void)
-{
-	
-}
-
-
-/*
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
- *	Boilerplate Utilities
- * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
- */
-
-/***************************************** Fail() *************************************/
-// Load up par->returnValue with "false" and an error message
-void Fail(char *message)
-{
-	Handle	h;
-	fatalError = true;
-	if (par->returnValue) DisposeHandle(par->returnValue);
-	if (!*message) message = kSyntaxMsg; 
-	par->returnValue = (PtrToHand("false\r", &h, 6) ||
-						PtrAndHand(message, h, strlen(message)+1)) ? nil : h;
-}
-
-/*************************************** SetResult() **********************************/
-// Load up par->returnValue with a string
-void SetResult(char *message)
-{
-	PtrToHand(message, &par->returnValue, strlen(message) + 1);
-}
-
-/*************************************** FalseAlarm() *********************************/
-// Handle requests for kSyntaxMsg or kCopyrightMsg & bad paramCounts
-Boolean FalseAlarm(void)
-{
-	Boolean result = false;
-	short	pCnt = par->paramCount;
-	
-	if(pCnt == 1) {
-		if ((result = !strcmp((char*)*par->params[0], "!")))
-			SetResult(kCopyrightMsg);
-		else if ((result = !strcmp ((char*)*par->params[0], "?")))
-			SetResult(kSyntaxMsg);
-		else if ((result = !strcmp ((char*)*par->params[0], "??")))
-			SetResult(kVersionNumber);
-		else if ((result = !strcmp ((char*)*par->params[0], "???")))
-			SetResult(__DATE__"  "__TIME__);
-	}
-	if (!result && (result = ((pCnt < kMinNumParams) || (pCnt > kMaxNumParams))))
-		Fail(kSyntaxMsg);
-	
-	return(result);
-}
