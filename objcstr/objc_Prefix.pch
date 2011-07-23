@@ -1,0 +1,3 @@
+#include <Cocoa/Cocoa.h>
+
+#define SCParamBlock		SCParamBlock_objcstr
