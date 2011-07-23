@@ -22,7 +22,7 @@
 SCParamBlock*		sParamBlock = NULL;
 
 
-int	main( XCmdPtr inParamBlock );
+int	ExternalMain( XCmdPtr inParamBlock ) __asm("_main");
 
 
 /*
@@ -31,7 +31,7 @@ int	main( XCmdPtr inParamBlock );
  * ÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑÑ
  */
 
-int	main( XCmdPtr inParamBlock )
+int	ExternalMain( XCmdPtr inParamBlock )
 {
 	sParamBlock = [[SCParamBlock alloc] initWithXCmdBlock: inParamBlock];
 	
