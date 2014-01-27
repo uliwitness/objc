@@ -11,7 +11,7 @@
 
 #include <Carbon/Carbon.h>
 
-#pragma options align = mac68k
+#pragma pack(push, 2)
 
 typedef struct XCmdBlock {
 	short		paramCount;		// 0
@@ -214,6 +214,6 @@ void			GetUserPropByIndexLong		(XCmdPtr paramPtr, Handle objectDescrip, long ind
 void			SetUserPropByIndexLong		(XCmdPtr paramPtr, Handle objectDescrip, long index, Handle propData);
 void			UserPropIndexToNameLong		(XCmdPtr paramPtr, Handle objectDescrip, long index, StringPtr propName);
 
-#pragma options align = reset
+#pragma pack(pop)
 
 #endif	// #ifndef _SuperXCmdH_
