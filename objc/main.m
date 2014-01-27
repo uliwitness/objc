@@ -37,33 +37,43 @@ int	ExternalMain( XCmdPtr inParamBlock )
 	
 	NSInvocation	*	theInvocation = nil;
 	NSMethodSignature*	theSignature = nil;
-	
-	// Load requested frameworks:
-	NSString*	theFrameworks = [sParamBlock parameterAtIndex: 0];
-	NSArray*	frameworksArray = [theFrameworks componentsSeparatedByString: @"\r"];
-	for( NSString* theFramework in frameworksArray )
-	{
-		if( [theFramework rangeOfString: @"/"].location == NSNotFound )
-		{
-			theFramework = [NSString stringWithFormat: @"/System/Library/Frameworks/%1$@.framework", theFramework];
-		}
 		
-		NSBundle	*	frameworkBundle = [NSBundle bundleWithPath: theFramework];
-		if( frameworkBundle && ![frameworkBundle isLoaded] )
-			[frameworkBundle load];
-	}
-	
 	// Find class or object to call:
-	NSString*	theObjectStr = [sParamBlock parameterAtIndex: 1];
+	NSString*	theObjectStr = [sParamBlock parameterAtIndex: 0];
 	id			theObject = nil;
 	
+	if( [theObjectStr isEqualToString: @"!"] )
+	{
+		[sParamBlock setReturnValue: @"1.1, (c) 2014 by Uli Kusterer, all rights reserved."];
+		return 0;
+	}
+	if( [theObjectStr isEqualToString: @"?"] )
+	{
+		[sParamBlock setReturnValue: @"put objc({\"NSClassName\"|address},\"methodName:\"[,param1[,\"part2OfMethodName:\",param2[,...]]])"];
+		return 0;
+	}
+		
 	if( [[theObjectStr stringByTrimmingCharactersInSet: [NSCharacterSet decimalDigitCharacterSet]] length] == 0 )	// Raw pointer.
+	{
 		theObject = (id) [theObjectStr integerValue];
+		if( !theObject )	// Shortcut message sends to 0 to another 0.
+		{
+			[sParamBlock setReturnValue: @"0"];
+			return 0;
+		}
+	}
 	else
+	{
 		theObject = NSClassFromString( theObjectStr );
+		if( !theObject )
+		{
+			[sParamBlock setReturnValue: [NSString stringWithFormat: @"Can't find class '%@'.", theObjectStr]];
+			return 0;
+		}
+	}
 	
 	// No parameters? Call directly:
-	NSString	*	methodName = [sParamBlock parameterAtIndex: 2];
+	NSString	*	methodName = [sParamBlock parameterAtIndex: 1];
 	if( [methodName characterAtIndex: [methodName length] -1] != ':' )
 	{
 		SEL theSelector = NSSelectorFromString(methodName);
@@ -77,7 +87,7 @@ int	ExternalMain( XCmdPtr inParamBlock )
 		// Every second  parameter is a label:
 		NSMutableString*	selectorString = [[methodName mutableCopy] autorelease];
 		NSInteger			numParams = [sParamBlock parameterCount];
-		for( int x = 4; x < numParams; x += 2 )
+		for( int x = 3; x < numParams; x += 2 )
 		{
 			[selectorString appendString: [sParamBlock parameterAtIndex: x]];
 		}
@@ -90,51 +100,52 @@ int	ExternalMain( XCmdPtr inParamBlock )
 		[theInvocation setSelector: theSelector];
 		
 		// Add parameters to invocation, which are the params following the selector bits:
-		for( int x = 3; x < numParams; x += 2 )
+		for( int y = 2; y < numParams; y += 2 )
 		{
-			NSString	*	theParam = [sParamBlock parameterAtIndex: x];
-			const char*	theType = [theSignature getArgumentTypeAtIndex: x / 2];
+			NSString	*	theParam = [sParamBlock parameterAtIndex: y];
+			int	x = (y +1) / 2;
+			const char*	theType = [theSignature getArgumentTypeAtIndex: x];
 			if( strcmp( theType, @encode(id) ) == 0 )
 			{
 				id	paramObj = (id) [theParam integerValue];
-				[theInvocation setArgument: &paramObj atIndex: x +2];
+				[theInvocation setArgument: &paramObj atIndex: x];
 			}
 			else if( strcmp( theType, @encode(BOOL) ) == 0 )
 			{
 				int	paramInt = ([theParam caseInsensitiveCompare: @"true"] == NSOrderedSame) || ([theParam caseInsensitiveCompare: @"YES"] == NSOrderedSame);
-				[theInvocation setArgument: &paramInt atIndex: x +2];
+				[theInvocation setArgument: &paramInt atIndex: x];
 			}
 			else if( strcmp( theType, @encode(int) ) == 0 )
 			{
 				int	paramInt = [theParam intValue];
-				[theInvocation setArgument: &paramInt atIndex: x +2];
+				[theInvocation setArgument: &paramInt atIndex: x];
 			}
 			else if( strcmp( theType, @encode(long long) ) == 0 )
 			{
 				long long	paramLongLong = [theParam longLongValue];
-				[theInvocation setArgument: &paramLongLong atIndex: x +2];
+				[theInvocation setArgument: &paramLongLong atIndex: x];
 			}
 			else if( strcmp( theType, @encode(unichar) ) == 0 )
 			{
 				unichar	paramUniChar = [theParam characterAtIndex:0];
-				[theInvocation setArgument: &paramUniChar atIndex: x +2];
+				[theInvocation setArgument: &paramUniChar atIndex: x];
 			}
 			else if( strcmp( theType, @encode(char) ) == 0 )
 			{
 				char	paramChar = [theParam UTF8String][0];
-				[theInvocation setArgument: &paramChar atIndex: x +2];
+				[theInvocation setArgument: &paramChar atIndex: x];
 			}
 			else if( strcmp( theType, @encode(NSPoint) ) == 0 )
 			{
 				NSArray*	parts = [theParam componentsSeparatedByString: @","];
 				NSPoint	paramPoint = NSMakePoint([[parts objectAtIndex: 0] doubleValue], [[parts objectAtIndex: 1] doubleValue]);
-				[theInvocation setArgument: &paramPoint atIndex: x +2];
+				[theInvocation setArgument: &paramPoint atIndex: x];
 			}
 			else if( strcmp( theType, @encode(NSRect) ) == 0 )
 			{
 				NSArray*	parts = [theParam componentsSeparatedByString: @","];
 				NSRect		paramRect = NSMakeRect([[parts objectAtIndex: 0] doubleValue], [[parts objectAtIndex: 1] doubleValue], [[parts objectAtIndex: 2] doubleValue], [[parts objectAtIndex: 3] doubleValue]);
-				[theInvocation setArgument: &paramRect atIndex: x +2];
+				[theInvocation setArgument: &paramRect atIndex: x];
 			}
 		}
 	}
