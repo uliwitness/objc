@@ -92,8 +92,8 @@ int	ExternalMain( XCmdPtr inParamBlock )
 		// Add parameters to invocation, which are the params following the selector bits:
 		for( int x = 3; x < numParams; x += 2 )
 		{
-			NSString	*	theParam = [sParamBlock parameterAtIndex: x +2];	//
-			const char*	theType = [theSignature getArgumentTypeAtIndex: x];
+			NSString	*	theParam = [sParamBlock parameterAtIndex: x];
+			const char*	theType = [theSignature getArgumentTypeAtIndex: x / 2];
 			if( strcmp( theType, @encode(id) ) == 0 )
 			{
 				id	paramObj = (id) [theParam integerValue];
